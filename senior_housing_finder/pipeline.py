@@ -110,7 +110,7 @@ def run(
 
     if not rows:
         print("[pipeline] no rows collected — exiting")
-        sys.exit(1)
+        sys.exit(0)  # empty is fine
 
     df = pd.DataFrame(rows)
 
