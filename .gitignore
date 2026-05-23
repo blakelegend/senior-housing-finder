@@ -1,0 +1,48 @@
+# Secrets
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Output / runtime state
+data/
+logs/
+*.sqlite
+*.sqlite.bak.sqlite
+*.sqlite-journal
+*.bak.sqlite
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.coverage
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
+# Streamlit
+.streamlit/secrets.toml

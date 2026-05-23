@@ -1,0 +1,35 @@
+name: ci
+
+# Runs on every push / PR. Cheap sanity check: imports + syntax compile.
+# Add real pytest tests under tests/ and uncomment the pytest step below.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile all Python files
+        run: |
+          python -m compileall -q senior_housing_finder app.py main_scraper.py
+
+      - name: Import smoke test
+        run: |
+          python -c "import senior_housing_finder; from senior_housing_finder import pipeline; print('imports ok')"
+
+      # - name: Run tests
+      #   run: pytest -q
