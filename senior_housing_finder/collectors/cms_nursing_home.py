@@ -56,7 +56,8 @@ def _fetch_via_csv() -> pd.DataFrame:
     return pd.read_csv(io.StringIO(resp.text), low_memory=False)
 
 
-def collect_cms_nursing_homes(states: Optional[List[str]] = None) -> List[dict]:
+# safe-mode patched
+def _raw_collect_cms_nursing_homes(states: Optional[List[str]] = None) -> List[dict]:
     """
     Return a list of normalized facility dicts from CMS Nursing Home data.
 
@@ -103,3 +104,12 @@ def collect_cms_nursing_homes(states: Optional[List[str]] = None) -> List[dict]:
 
     df["source"] = "CMS"
     return df.to_dict(orient="records")
+
+
+def collect_cms_nursing_homes(states=None):
+    """Safe wrapper: never crashes the pipeline if CMS API is down."""
+    try:
+        return _raw_collect_cms_nursing_homes(states)
+    except Exception as e:
+        print(f"[cms_nursing_home] FAILED: {e}; returning empty list")
+        return []
