@@ -1,11 +1,22 @@
 """
 Google Drive uploader.
 
-Pushes scraper outputs to a shared Drive folder using a service account.
-Auth via GOOGLE_DRIVE_CREDENTIALS_JSON (full JSON contents) + GOOGLE_DRIVE_FOLDER_ID.
-Skips silently if either is missing — never crashes the pipeline.
+Pushes scraper outputs to a shared Drive folder using OAuth user credentials
+(not a service account — service accounts cannot own files in personal Drive
+folders, causing 403 storageQuotaExceeded on writes).
+
+Auth env vars (all three required):
+  GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN  — long-lived refresh token from one-time browser flow
+  GOOGLE_DRIVE_OAUTH_CLIENT_ID      — OAuth 2.0 client ID (Desktop app)
+  GOOGLE_DRIVE_OAUTH_CLIENT_SECRET  — OAuth 2.0 client secret
+
+Destination env var:
+  GOOGLE_DRIVE_FOLDER_ID  — target folder; must be owned by or shared with the
+                            Google account that authorized the refresh token
+
+Skips silently if any required env var is missing or libs aren't installed —
+never crashes the pipeline.
 """
-import json
 import logging
 import os
 import sys
@@ -17,19 +28,29 @@ log = logging.getLogger("drive_upload")
 
 
 def _drive():
-    creds_json = os.getenv("GOOGLE_DRIVE_CREDENTIALS_JSON", "").strip()
-    if not creds_json:
-        log.info("no GOOGLE_DRIVE_CREDENTIALS_JSON — skipping upload")
+    refresh_token = os.getenv("GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN", "").strip()
+    client_id = os.getenv("GOOGLE_DRIVE_OAUTH_CLIENT_ID", "").strip()
+    client_secret = os.getenv("GOOGLE_DRIVE_OAUTH_CLIENT_SECRET", "").strip()
+    if not (refresh_token and client_id and client_secret):
+        log.info(
+            "OAuth env vars missing (need GOOGLE_DRIVE_OAUTH_REFRESH_TOKEN, "
+            "GOOGLE_DRIVE_OAUTH_CLIENT_ID, GOOGLE_DRIVE_OAUTH_CLIENT_SECRET) "
+            "— skipping upload"
+        )
         return None
     try:
-        from google.oauth2 import service_account
+        from google.oauth2.credentials import Credentials
         from googleapiclient.discovery import build
-    except ImportError:
-        log.warning("google-api-python-client not installed — skipping upload")
+    except ImportError as e:
+        log.warning(f"Google libs import failed ({e!r}) — skipping upload")
         return None
     try:
-        creds = service_account.Credentials.from_service_account_info(
-            json.loads(creds_json),
+        creds = Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=client_id,
+            client_secret=client_secret,
             scopes=["https://www.googleapis.com/auth/drive.file"],
         )
         return build("drive", "v3", credentials=creds, cache_discovery=False)
