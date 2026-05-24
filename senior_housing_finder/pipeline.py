@@ -221,8 +221,8 @@ def run(
 
     # ---- Seed CRM ---------------------------------------------------------
     crm = LeadPipeline()
-    seeded = crm.bulk_import(df, only_with_score=50.0)
-    print(f"[pipeline] CRM seeded with {seeded} leads (priority threshold 50)")
+    seeded = crm.bulk_import(df, only_with_score=15.0)
+    print(f"[pipeline] CRM seeded with {seeded} leads (priority threshold 15)")
 
     # ---- Embed outreach scripts for the top N ----------------------------
     if top > 0:
