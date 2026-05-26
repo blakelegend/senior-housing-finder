@@ -17,8 +17,13 @@ _STREET_SUFFIX = {
 }
 
 
-def parse_address(raw: str) -> Dict[str, str]:
+def parse_address(raw) -> Dict[str, str]:
     """Tag a freeform address string into named components."""
+    # Pandas NaN floats sneak through dataframe columns where addresses
+    # are missing; coerce non-strings to empty so usaddress doesn't blow up
+    # deep in its regex layer with a confusing TypeError.
+    if not isinstance(raw, str) or not raw.strip():
+        return {"raw": "", "parse_error": "not_a_string"}
     try:
         tagged, _ = usaddress.tag(raw)
     except usaddress.RepeatedLabelError:
@@ -38,9 +43,11 @@ def parse_address(raw: str) -> Dict[str, str]:
     }
 
 
-def normalize_address(raw: Optional[str]) -> Optional[str]:
+def normalize_address(raw) -> Optional[str]:
     """Produce a canonical uppercase form for fuzzy matching/dedup."""
-    if not raw:
+    # Pandas NaN is a float and truthy — `if not raw` doesn't catch it.
+    # Explicitly require a real non-empty string before parsing.
+    if not isinstance(raw, str) or not raw.strip():
         return None
     parsed = parse_address(raw)
     if "parse_error" in parsed:
