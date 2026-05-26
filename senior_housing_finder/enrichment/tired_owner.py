@@ -24,7 +24,7 @@ from typing import List, Optional
 import pandas as pd
 
 from ..config import CONFIG
-from ..utils.http import polite_get
+from ..utils.http_client import polite_get
 
 
 CMS_DEFICIENCIES = "https://data.cms.gov/provider-data/api/1/datastore/query/r5ix-sfxw/0"

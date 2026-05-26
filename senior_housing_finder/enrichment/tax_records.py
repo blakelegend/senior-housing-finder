@@ -26,7 +26,7 @@ import re
 from typing import List, Optional
 
 from ..config import CONFIG
-from ..utils.http import polite_get
+from ..utils.http_client import polite_get
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +118,8 @@ def _reportall_lookup(address: str) -> Optional[dict]:
 def _attom_property(address: str) -> Optional[dict]:
     if not CONFIG.attom_api_key:
         return None
+    if not isinstance(address, str) or not address.strip():
+        return None
     headers = {"apikey": CONFIG.attom_api_key, "accept": "application/json"}
     try:
         # ATTOM splits property into multiple endpoints; we hit the "expandedprofile" one
@@ -125,7 +127,7 @@ def _attom_property(address: str) -> Optional[dict]:
         if not m:
             return None
         street, city, state, _ = m.groups()
-        from ..utils.http import polite_session
+        from ..utils.http_client import polite_session
         sess = polite_session()
         sess.headers.update(headers)
         resp = polite_get(
@@ -162,7 +164,7 @@ def _attom_liens(address: str) -> List[dict]:
         return []
     headers = {"apikey": CONFIG.attom_api_key, "accept": "application/json"}
     try:
-        from ..utils.http import polite_session
+        from ..utils.http_client import polite_session
         sess = polite_session()
         sess.headers.update(headers)
         resp = polite_get(

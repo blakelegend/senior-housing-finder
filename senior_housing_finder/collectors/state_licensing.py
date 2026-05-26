@@ -28,7 +28,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 from ..config import CONFIG
-from ..utils.http import polite_get
+from ..utils.http_client import polite_get
 
 
 class StateLicenseSource(ABC):
@@ -41,31 +41,33 @@ class StateLicenseSource(ABC):
 
 
 # ---------------------------------------------------------------------------
-# Florida — AHCA
+# Florida — AHCA (currently deferred — see note)
 # ---------------------------------------------------------------------------
 class FloridaAHCA(StateLicenseSource):
+    """
+    Florida AHCA / FloridaHealthFinder.
+
+    KNOWN LIMITATION (2026): The old FacilityProvider endpoint returns 404 and
+    FloridaHealthFinder migrated to a JS-rendered SPA that gates CSV/XLSX
+    exports behind a UI search with a "dataset too large" warning that blocks
+    bulk downloads. A proper FL collector requires headless browser automation
+    (Playwright), which is out of scope for the current free-tier deployment.
+
+    Mitigation: CMS data already covers every FL **nursing home** nationwide
+    via the cms_nursing_home collector — the FL state collector was only
+    supplementing with ALFs (Assisted Living Facilities). ALF coverage in FL
+    will improve when we wire Playwright-based scraping (separate ticket).
+    """
     state_code = "FL"
     name = "Florida AHCA"
-    ENDPOINT = "https://quality.healthfinder.fl.gov/Facility-Provider/FacilityProvider"
 
     def fetch_facilities(self) -> List[dict]:
-        try:
-            resp = polite_get(self.ENDPOINT, rps=1.0)
-        except Exception as e:
-            print(f"[{self.name}] fetch failed: {e}")
-            return []
-        soup = BeautifulSoup(resp.text, "lxml")
-        out: List[dict] = []
-        for row in soup.select("table.facility-results tr")[1:]:
-            cells = [c.get_text(strip=True) for c in row.select("td")]
-            if len(cells) < 5:
-                continue
-            out.append({
-                "name": cells[0], "address": cells[1], "city": cells[2],
-                "state": self.state_code, "zip": cells[3], "license_type": cells[4],
-                "source": f"StateLicense:{self.state_code}",
-            })
-        return out
+        print(
+            f"[{self.name}] DEFERRED: FL AHCA portal requires browser automation; "
+            "FL nursing homes still covered via cms_nursing_home. "
+            "ALF coverage pending Playwright scraper."
+        )
+        return []
 
 
 # ---------------------------------------------------------------------------
@@ -116,16 +118,24 @@ class TexasHHSC(StateLicenseSource):
 
 
 # ---------------------------------------------------------------------------
-# California — DSS Community Care Licensing
+# California — CHHS Community Care Licensing Facilities
 # ---------------------------------------------------------------------------
 class CaliforniaCCLD(StateLicenseSource):
     """
-    California DSS publishes their Community Care Facility roster as a public
-    download. Covers RCFEs (Residential Care for the Elderly) and ARFs.
+    California CHHS open-data portal publishes the Community Care Licensing
+    facility roster. Covers RCFEs (Residential Care for the Elderly), Adult
+    Residential, and Child Care — we filter to senior/elderly only.
+
+    Note: the old cdss.ca.gov URL is dead (CDSS server returns a 302 to
+    http://localhost/404, no joke). The chhs.ca.gov portal is the supported
+    replacement. ~8,400 senior facilities statewide as of 2026.
     """
     state_code = "CA"
     name = "California CCLD"
-    DOWNLOAD = "https://www.cdss.ca.gov/Portals/9/CCLD/Statistical-Reports/CCLD-Facilities.csv"
+    DOWNLOAD = (
+        "https://gis.data.chhs.ca.gov/api/download/v1/items/"
+        "db31b0884a074cff9260facb3f2ade45/csv?layers=0"
+    )
 
     def fetch_facilities(self) -> List[dict]:
         try:
@@ -135,20 +145,29 @@ class CaliforniaCCLD(StateLicenseSource):
             print(f"[{self.name}] fetch failed: {e}")
             return []
 
+        # Filter: keep only elderly/senior residential. PROGRAM_TYPE narrows
+        # to adult/senior; FAC_TYPE_DESC narrows further to elderly facilities
+        # (excludes general adult residential which serves the developmentally
+        # disabled — different acquisition thesis).
+        if "PROGRAM_TYPE" in df.columns:
+            df = df[df["PROGRAM_TYPE"].astype(str).str.contains("ADULT|SENIOR", case=False, na=False)]
+        if "FAC_TYPE_DESC" in df.columns:
+            df = df[df["FAC_TYPE_DESC"].astype(str).str.contains("ELDERLY|RCFE", case=False, na=False)]
+
         rename = {
-            "FACNAME": "name", "Facility Name": "name",
-            "FACADDR": "address", "Address": "address",
-            "FACCITY": "city", "City": "city",
-            "FACZIP": "zip",
-            "FACPHONE": "phone", "Phone": "phone",
-            "FACTYPE": "license_type", "Facility Type": "license_type",
-            "FACCAP": "beds", "Licensed Capacity": "beds",
-            "LICENSEE": "legal_owner", "Licensee": "legal_owner",
+            "NAME": "name",
+            "RES_STREET_ADDR": "address",
+            "RES_CITY": "city",
+            "RES_ZIP_CODE": "zip",
+            "FAC_PHONE_NBR": "phone",
+            "FAC_TYPE_DESC": "license_type",
+            "CAPACITY": "beds",
+            "FAC_NBR": "license_number",
+            "FAC_LATITUDE": "lat",
+            "FAC_LONGITUDE": "lng",
         }
         df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
-        # RCFE = adult, ARF = developmentally disabled — keep RCFE only
-        if "license_type" in df.columns:
-            df = df[df["license_type"].astype(str).str.contains("RCFE|ELDERLY", case=False, na=False)]
+
         df["state"] = self.state_code
         df["source"] = f"StateLicense:{self.state_code}"
         return df.to_dict(orient="records")

@@ -20,7 +20,7 @@ from typing import Dict, Optional
 
 from bs4 import BeautifulSoup
 
-from ..utils.http import polite_get
+from ..utils.http_client import polite_get
 
 
 def lookup_county(lat: float, lng: float) -> Optional[Dict[str, str]]:

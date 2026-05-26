@@ -18,7 +18,7 @@ import re
 from typing import Optional
 
 from ..config import CONFIG
-from ..utils.http import polite_get
+from ..utils.http_client import polite_get
 
 
 _DOMAIN_BLOCKLIST = {"gmail.com", "yahoo.com", "hotmail.com", "aol.com"}
@@ -66,13 +66,14 @@ def enrich_with_company_lookup(facility: dict) -> dict:
         or facility.get("true_owner")
         or facility.get("name")
     )
-    if not operator_name:
+    # Pandas NaN is truthy as a float; require a real string before string ops.
+    if not isinstance(operator_name, str) or not operator_name:
         return facility
 
     # Prefer an explicit website if Google Places gave us one
     website = facility.get("website")
     domain = None
-    if website:
+    if isinstance(website, str) and website:
         m = re.search(r"https?://(?:www\.)?([^/]+)", website)
         if m:
             domain = m.group(1).lower()

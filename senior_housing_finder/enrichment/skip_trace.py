@@ -35,7 +35,7 @@ import os
 from typing import Dict, List, Optional
 
 from ..config import CONFIG
-from ..utils.http import polite_get, polite_session
+from ..utils.http_client import polite_get, polite_session
 
 
 def _permissible_purpose_ok() -> bool:

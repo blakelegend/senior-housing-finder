@@ -25,7 +25,7 @@ from typing import Dict, List, Optional
 import pandas as pd
 
 from ..config import CONFIG
-from ..utils.http import polite_get
+from ..utils.http_client import polite_get
 from .property_records import lookup_county
 
 

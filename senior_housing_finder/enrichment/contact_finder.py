@@ -14,7 +14,7 @@ import phonenumbers
 from phonenumbers import NumberParseException
 
 from ..config import CONFIG
-from ..utils.http import polite_get
+from ..utils.http_client import polite_get
 
 
 # Decision-maker titles we care about for senior housing acquisitions

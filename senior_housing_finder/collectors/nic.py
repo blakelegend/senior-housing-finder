@@ -18,7 +18,7 @@ from typing import List, Optional
 
 from bs4 import BeautifulSoup
 
-from ..utils.http import polite_get
+from ..utils.http_client import polite_get
 
 
 NIC_PRESS_RELEASES = "https://www.nic.org/news-press/"

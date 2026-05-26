@@ -163,7 +163,10 @@ def run(
     # ---- Per-row enrichment (property + tax + market + skip-trace + company + contact) --
     if enrich:
         print("[pipeline] enriching per-row (tax, property, market, company, contacts)...")
-        records = df.to_dict(orient="records")
+        # Replace pandas NaN with None before dict conversion. Otherwise NaN
+        # leaks into downstream str/regex operations as a float and trips
+        # "expected string or bytes-like object, got 'float'" errors.
+        records = df.where(pd.notna(df), None).to_dict(orient="records")
         for i, fac in enumerate(records, 1):
             try:
                 fac = enrich_with_property_records(fac)

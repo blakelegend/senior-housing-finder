@@ -5,14 +5,17 @@ Distinct from the Provider Information dataset — this one exposes the
 **individual owners and management companies** behind each nursing home,
 along with their ownership %, role, and association start date.
 
-Source: https://data.cms.gov/provider-data/dataset/kvbk-r2ea
+Source: https://data.cms.gov/provider-data/dataset/y2hd-n93e
+  (Renamed from kvbk-r2ea in 2024 — old identifier is dead)
+
 - Federal Provider Number links to the facility table
 - Multiple owner rows per facility (5%+ ownership disclosure)
 - Includes role: 5% OR GREATER DIRECT OWNERSHIP INTEREST, MANAGING EMPLOYEE,
   OFFICER, DIRECTOR, OPERATIONAL/MANAGERIAL CONTROL, etc.
 
 This is the single highest-signal dataset for senior-housing acquisitions —
-it answers "who actually owns this place" without paid enrichment.
+it answers "who actually owns this place" AND when they bought in (the
+association date drives the 8-20 year transition-window scoring).
 """
 import io
 from typing import List, Optional
@@ -21,27 +24,50 @@ import pandas as pd
 from rapidfuzz import fuzz
 
 from ..config import CONFIG
-from ..utils.http import polite_get
+from ..utils.http_client import polite_get
 
-OWNERSHIP_API = "https://data.cms.gov/provider-data/api/1/datastore/query/kvbk-r2ea/0"
-OWNERSHIP_CSV = "https://data.cms.gov/provider-data/sites/default/files/resources/NH_Ownership.csv"
+DATASET_ID = "y2hd-n93e"  # CMS Ownership (renamed from kvbk-r2ea in 2024)
+METASTORE_URL = f"https://data.cms.gov/provider-data/api/1/metastore/schemas/dataset/items/{DATASET_ID}"
+OWNERSHIP_API = f"https://data.cms.gov/provider-data/api/1/datastore/query/{DATASET_ID}/0"
+
+
+def _resolve_current_csv_url() -> Optional[str]:
+    """Look up the current CSV download URL via the CMS metastore.
+
+    CMS rotates the date in the filename monthly (e.g. NH_Ownership_Apr2026.csv).
+    """
+    try:
+        resp = polite_get(METASTORE_URL, use_cache=False, rps=1.0)
+        meta = resp.json()
+    except Exception as e:
+        print(f"[cms_ownership] metastore lookup failed: {e}")
+        return None
+    for dist in meta.get("distribution", []):
+        url = dist.get("downloadURL")
+        if url and url.endswith(".csv"):
+            return url
+    return None
 
 
 def _fetch() -> pd.DataFrame:
-    """Try CSV first (fastest), fall back to paginated API."""
-    try:
-        resp = polite_get(OWNERSHIP_CSV, use_cache=True)
-        return pd.read_csv(io.StringIO(resp.text), low_memory=False)
-    except Exception:
-        pass
+    """Resolve current CSV via metastore; fall back to paginated API."""
+    url = _resolve_current_csv_url()
+    if url:
+        try:
+            resp = polite_get(url, use_cache=True, rps=0.5)
+            return pd.read_csv(io.StringIO(resp.text), low_memory=False)
+        except Exception as e:
+            print(f"[cms_ownership] CSV download failed for {url}: {e}")
 
+    # Paginated JSON fallback
     frames = []
     offset = 0
     page = 5000
     while True:
         try:
             resp = polite_get(OWNERSHIP_API, params={"limit": page, "offset": offset})
-        except Exception:
+        except Exception as e:
+            print(f"[cms_ownership] datastore page failed at offset {offset}: {e}")
             break
         rows = resp.json().get("results", [])
         if not rows:
@@ -64,15 +90,29 @@ def collect_cms_ownership(states: Optional[List[str]] = None) -> pd.DataFrame:
         return df
 
     rename = {
+        # Spaced (CSV) column names — current Apr 2026 dataset uses "State"
         "CMS Certification Number (CCN)": "cms_id",
         "Federal Provider Number": "cms_id",
         "Provider Name": "facility_name",
+        "State": "state",
         "Provider State": "state",
         "Owner Name": "owner_name",
         "Owner Type": "owner_type",
+        "Role played by Owner or Manager in Facility": "owner_role",
+        "Role Played by Owner or Manager in Facility": "owner_role",
         "Owner Role": "owner_role",
+        "Ownership Percentage": "owner_pct",
         "Owner Percentage": "owner_pct",
         "Association Date": "association_date",
+        # snake_case (datastore JSON) column names
+        "cms_certification_number_ccn": "cms_id",
+        "provider_name": "facility_name",
+        "state": "state",
+        "owner_name": "owner_name",
+        "owner_type": "owner_type",
+        "role_played_by_owner_or_manager_in_facility": "owner_role",
+        "ownership_percentage": "owner_pct",
+        "association_date": "association_date",
     }
     df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
 
