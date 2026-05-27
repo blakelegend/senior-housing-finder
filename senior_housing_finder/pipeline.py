@@ -195,6 +195,12 @@ def run(
     df = value_dataframe(df)
 
     # ---- Score ------------------------------------------------------------
+    # Coerce NaN to "" in string columns so scoring's `field or ""` patterns
+    # work. Pandas NaN is a float, truthy in boolean contexts, and crashes
+    # downstream `.lower()` / `.upper()` / `.strip()` calls deep in scoring.
+    str_cols = df.select_dtypes(include="object").columns
+    df[str_cols] = df[str_cols].fillna("")
+
     df = score_dataframe(df)
     df = score_dataframe_selling(df)
     df = composite_priority(df, fit_weight=0.5)
