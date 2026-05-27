@@ -241,6 +241,16 @@ def run(
         df = pd.concat([top_n, df.iloc[top:]], ignore_index=True)
 
     # ---- Export -----------------------------------------------------------
+    # Multiple collectors can contribute columns with the same (or case-
+    # variant) names — e.g. CMS "Address" vs Medicare "address". pandas keeps
+    # both, but SQLite's CREATE TABLE rejects duplicate column names. Dedupe
+    # by lowercased name, keeping the first occurrence.
+    df = df.loc[:, ~df.columns.str.lower().duplicated()]
+    if not chains_df.empty:
+        chains_df = chains_df.loc[:, ~chains_df.columns.str.lower().duplicated()]
+    if not ownership_raw.empty:
+        ownership_raw = ownership_raw.loc[:, ~ownership_raw.columns.str.lower().duplicated()]
+
     xlsx = export_leads(df, prefix=output_prefix)
     print(f"[pipeline] wrote {xlsx}")
 
